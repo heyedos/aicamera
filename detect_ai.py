@@ -1,61 +1,66 @@
-import time
 import cv2
-import numpy as np
-from imx500 import Imx500Pipeline
+import json
+import time
+import os
+from picamera2 import Picamera2
 
-# Kamera çözünürlüğü modeli eğitirkenki ile aynı olmalı (320x320)
-pipeline = Imx500Pipeline({
-    "model_type": "object_detection",
-    "tensor_mode": "balloon",  # /lib/firmware/imx500/model/balloon klasörü
-    "threads": 2
-})
+picam2 = Picamera2()
+picam2.preview_configuration.main.size = (640, 480)
+picam2.preview_configuration.main.format = "RGB888"
+picam2.configure("preview")
+picam2.start()
 
-pipeline.start()
-print("Kamera başlatıldı, AI modeli yükleniyor...")
+print("AI model başlatıldı. Balonlar tespit ediliyor...")
 
+# FPS hesaplama
 prev_time = time.time()
 frame_count = 0
 fps = 0
 
 while True:
-    img, result = pipeline.get_frame()
+    frame = picam2.capture_array()
     frame_count += 1
 
-    # FPS hesapla
+    # FPS güncelle
     current_time = time.time()
     if current_time - prev_time >= 1.0:
         fps = frame_count / (current_time - prev_time)
-        prev_time = current_time
         frame_count = 0
+        prev_time = current_time
 
+    # AI sonucu JSON dosyasından oku
+    try:
+        with open("/run/shm/ai_toolkit/output", "r") as f:
+            data = json.load(f)
+    except Exception:
+        data = {}
+
+    objects = data.get("objects", [])
     balloon_detected = False
 
-    if result is not None and "objects" in result:
-        for obj in result["objects"]:
-            label = obj.get("label", "object")
-            score = obj.get("score", 0)
-            box = obj.get("bbox", [0, 0, 0, 0])  # [x1, y1, x2, y2]
+    for obj in objects:
+        label = obj.get("label", "")
+        score = obj.get("score", 0)
+        x1, y1, x2, y2 = map(int, obj.get("bbox", [0, 0, 0, 0]))
 
-            if score > 0.5 and label.lower() == "balloon":
-                x1, y1, x2, y2 = map(int, box)
-                cv2.rectangle(img, (x1, y1), (x2, y2), (0, 255, 0), 2)
-                cv2.putText(img, f"{label} {score:.2f}", (x1, y1 - 10),
-                            cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
-                balloon_detected = True
+        if label.lower() == "balloon" and score > 0.5:
+            balloon_detected = True
+            cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 255, 0), 2)
+            cv2.putText(frame, f"{label} {score:.2f}", (x1, y1 - 10),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
 
     if not balloon_detected:
-        cv2.putText(img, "No balloon detected", (10, 30),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 0, 255), 2)
+        cv2.putText(frame, "No balloon detected", (10, 30),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
 
-    # FPS göster
-    cv2.putText(img, f"FPS: {fps:.1f}", (10, img.shape[0] - 10),
+    # FPS ekle
+    cv2.putText(frame, f"FPS: {fps:.1f}", (10, frame.shape[0] - 10),
                 cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 0), 2)
 
     # Görüntüyü göster
-    cv2.imshow("Balloon Detection", img)
+    cv2.imshow("Balloon Detection", frame)
 
-    if cv2.waitKey(1) & 0xFF == ord('q'):
+    if cv2.waitKey(1) & 0xFF == ord("q"):
         break
 
-pipeline.stop()
 cv2.destroyAllWindows()
