@@ -1,13 +1,13 @@
 from picamera2 import Picamera2
-import cv2
+import time
 import numpy as np
 import tflite_runtime.interpreter as tflite
+import cv2
 
-# Model ve etiket
 MODEL_PATH = "balloon_model_imx500.tflite"
 LABEL = "Balloon"
 
-# TFLite model yükle
+# TFLite modeli yükle
 interpreter = tflite.Interpreter(model_path=MODEL_PATH)
 interpreter.allocate_tensors()
 
@@ -18,11 +18,14 @@ width = input_details[0]['shape'][2]
 
 # Kamera başlat
 picam2 = Picamera2()
-picam2.configure(picam2.preview_configuration(main={"format": "RGB888", "size": (640, 480)}))
+config = picam2.create_preview_configuration(main={"format": "RGB888", "size": (width, height)})
+picam2.configure(config)
 picam2.start()
+time.sleep(1)
 
 while True:
     frame = picam2.capture_array()
+
     input_image = cv2.resize(frame, (width, height))
     input_data = np.expand_dims(input_image, axis=0).astype(np.uint8)
 
@@ -39,12 +42,11 @@ while True:
             x1, y1 = int(xmin * frame.shape[1]), int(ymin * frame.shape[0])
             x2, y2 = int(xmax * frame.shape[1]), int(ymax * frame.shape[0])
             cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 255, 0), 2)
-            cv2.putText(frame, LABEL, (x1, y1 - 10),
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
+            cv2.putText(frame, LABEL, (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
 
-    cv2.imshow('Balloon Detection', frame)
-
+    cv2.imshow("Balloon Detection", frame)
     if cv2.waitKey(1) & 0xFF == ord('q'):
         break
 
 cv2.destroyAllWindows()
+picam2.stop()
