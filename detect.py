@@ -1,40 +1,34 @@
+from picamera2 import Picamera2
 import cv2
 import numpy as np
 import tflite_runtime.interpreter as tflite
 
-# MODEL ve LABEL dosyası
+# Model ve etiket
 MODEL_PATH = "balloon_model_imx500.tflite"
 LABEL = "Balloon"
 
-# TFLite modeli yükle
+# TFLite model yükle
 interpreter = tflite.Interpreter(model_path=MODEL_PATH)
 interpreter.allocate_tensors()
 
 input_details = interpreter.get_input_details()
 output_details = interpreter.get_output_details()
-
 height = input_details[0]['shape'][1]
 width = input_details[0]['shape'][2]
 
 # Kamera başlat
-cap = cv2.VideoCapture(0)
-if not cap.isOpened():
-    print("Kamera açılamadı")
-    exit()
+picam2 = Picamera2()
+picam2.configure(picam2.preview_configuration(main={"format": "RGB888", "size": (640, 480)}))
+picam2.start()
 
 while True:
-    ret, frame = cap.read()
-    if not ret:
-        continue
-
-    # Giriş görüntüsünü modele uygun hale getir
+    frame = picam2.capture_array()
     input_image = cv2.resize(frame, (width, height))
     input_data = np.expand_dims(input_image, axis=0).astype(np.uint8)
 
     interpreter.set_tensor(input_details[0]['index'], input_data)
     interpreter.invoke()
 
-    # Çıktı verilerini al
     boxes = interpreter.get_tensor(output_details[0]['index'])[0]
     classes = interpreter.get_tensor(output_details[1]['index'])[0]
     scores = interpreter.get_tensor(output_details[2]['index'])[0]
@@ -53,5 +47,4 @@ while True:
     if cv2.waitKey(1) & 0xFF == ord('q'):
         break
 
-cap.release()
 cv2.destroyAllWindows()
