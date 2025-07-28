@@ -30,4 +30,4 @@ except KeyboardInterrupt:
     print("🛑 İnferans durduruldu.")
 
 finally:
-    camera.stop()
+    camera.stop()
