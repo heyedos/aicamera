@@ -1,0 +1,12 @@
+{
+  "model": "/home/pi/aicamera/network.rpk",
+  "input": {
+    "width": 224,
+    "height": 224,
+    "format": "rgb"
+  },
+  "output": {
+    "topk": 1,
+    "threshold": 0.5
+  }
+}
